@@ -21,4 +21,15 @@ describe("formatLineItem", () => {
     const out = formatLineItem({ description: "No tracking" } as never);
     expect(out).toContain("Tracking: None");
   });
+
+  it("exposes the Line Item ID so it can be reused for partial updates (gh-158)", () => {
+    const out = formatLineItem({
+      lineItemID: "3a1b2c3d-0000-4444-8888-abcdef123456",
+      description: "Consulting",
+      quantity: 1,
+      unitAmount: 100,
+    } as never);
+
+    expect(out).toContain("Line Item ID: 3a1b2c3d-0000-4444-8888-abcdef123456");
+  });
 });
