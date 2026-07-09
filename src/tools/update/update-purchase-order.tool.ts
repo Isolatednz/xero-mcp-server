@@ -2,7 +2,6 @@ import { z } from "zod";
 import { updateXeroPurchaseOrder } from "../../handlers/update-xero-purchase-order.handler.js";
 import { DeepLinkType, getDeepLink } from "../../helpers/get-deeplink.js";
 import { CreateXeroTool } from "../../helpers/create-xero-tool.js";
-import { PurchaseOrder } from "xero-node";
 
 const trackingSchema = z.object({
   name: z.string().describe("The name of the tracking category. Can be obtained from the list-tracking-categories tool"),
@@ -32,7 +31,11 @@ const lineItemSchema = z.object({
 
 const UpdatePurchaseOrderTool = CreateXeroTool(
   "update-purchase-order",
-  "Update a purchase order in Xero. Only works while the purchase order is still a draft.\
+  "Update a purchase order in Xero. Only works while the purchase order is still a draft, and \
+  this tool will never move it beyond DRAFT - submitting or authorising a purchase order is a \
+  controlled management action at this organisation and is deliberately not exposed here. \
+  Moving a purchase order to SUBMITTED, AUTHORISED, or any other status must be done directly \
+  in Xero by someone with the appropriate approval authority.\
   All line items must be provided in full on every call. Any line items not provided will be \
   removed, including existing line items. Do not modify line items that have not been \
   specified by the user.\
@@ -42,8 +45,6 @@ const UpdatePurchaseOrderTool = CreateXeroTool(
   preserved and the call will fail with a validation error. If you only want to change one \
   field (e.g. quantity), first call get-purchase-order to read the line item's current values, \
   then resupply all of them here with just that one field changed.\
-  This tool can also be used to move the purchase order forward, for example setting status \
-  to SUBMITTED or AUTHORISED once it's ready.\
   When a purchase order is updated, a deep link to it in Xero is returned. \
   This link should be displayed to the user.",
   {
@@ -62,9 +63,6 @@ const UpdatePurchaseOrderTool = CreateXeroTool(
     deliveryInstructions: z.string().optional().describe("Free text delivery instructions (500 characters max)."),
     contactId: z.string().optional().describe("The ID of the supplier contact to update the purchase order for. \
       Can be obtained from the list-contacts tool."),
-    status: z.enum(["DRAFT", "SUBMITTED", "AUTHORISED", "BILLED", "DELETED"])
-      .optional()
-      .describe("Move the purchase order to a new status, for example SUBMITTED or AUTHORISED once it's ready to send."),
   },
   async ({
     purchaseOrderId,
@@ -78,7 +76,6 @@ const UpdatePurchaseOrderTool = CreateXeroTool(
     telephone,
     deliveryInstructions,
     contactId,
-    status,
   }) => {
     const result = await updateXeroPurchaseOrder(
       purchaseOrderId,
@@ -92,7 +89,6 @@ const UpdatePurchaseOrderTool = CreateXeroTool(
       telephone,
       deliveryInstructions,
       contactId,
-      status as PurchaseOrder.StatusEnum | undefined,
     );
     if (result.isError) {
       return {

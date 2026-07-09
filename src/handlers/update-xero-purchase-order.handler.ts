@@ -47,7 +47,6 @@ async function updatePurchaseOrder(
   telephone: string | undefined,
   deliveryInstructions: string | undefined,
   contactId: string | undefined,
-  status: PurchaseOrder.StatusEnum | undefined,
 ): Promise<PurchaseOrder | undefined> {
   const purchaseOrder: PurchaseOrder = {
     lineItems: lineItems,
@@ -60,7 +59,10 @@ async function updatePurchaseOrder(
     telephone: telephone,
     deliveryInstructions: deliveryInstructions,
     contact: contactId ? { contactID: contactId } : undefined,
-    status: status,
+    // Deliberately never set here. Authorising/submitting a purchase order
+    // is a controlled management action at this organisation - this tool
+    // must never be able to move a PO beyond DRAFT. Xero defaults status to
+    // its current value (DRAFT, enforced by the guard below) when omitted.
   };
 
   const response = await xeroClient.accountingApi.updatePurchaseOrder(
@@ -77,7 +79,11 @@ async function updatePurchaseOrder(
 }
 
 /**
- * Update an existing purchase order in Xero
+ * Update an existing purchase order in Xero.
+ *
+ * This intentionally has no way to change status. Moving a purchase order to
+ * SUBMITTED, AUTHORISED, BILLED, or DELETED must be done directly in Xero by
+ * someone with the appropriate approval authority - it is not exposed here.
  */
 export async function updateXeroPurchaseOrder(
   purchaseOrderId: string,
@@ -91,22 +97,19 @@ export async function updateXeroPurchaseOrder(
   telephone?: string,
   deliveryInstructions?: string,
   contactId?: string,
-  status?: PurchaseOrder.StatusEnum,
 ): Promise<XeroClientResponse<PurchaseOrder>> {
   try {
     const existingPurchaseOrder = await getPurchaseOrder(purchaseOrderId);
     const currentStatus = existingPurchaseOrder?.status;
 
-    // Only allow updates while still a draft - once submitted/authorised/billed,
-    // changes should go through Xero directly. Mirrors update-invoice's guard.
-    // Note: this still allows the update call itself to move a DRAFT PO
-    // forward (e.g. status: AUTHORISED), since the check is against the
-    // *current* status before this update is applied.
+    // Only allow updates while still a draft. Since this tool can never set
+    // status itself, this also guarantees a purchase order can never leave
+    // DRAFT via this connector at all.
     if (currentStatus !== PurchaseOrder.StatusEnum.DRAFT) {
       return {
         result: null,
         isError: true,
-        error: `Cannot update purchase order because it is not a draft. Current status: ${currentStatus}`,
+        error: `Cannot update purchase order because it is not a draft. Current status: ${currentStatus}. Submitting or authorising a purchase order must be done directly in Xero.`,
       };
     }
 
@@ -122,7 +125,6 @@ export async function updateXeroPurchaseOrder(
       telephone,
       deliveryInstructions,
       contactId,
-      status,
     );
 
     if (!updatedPurchaseOrder) {
