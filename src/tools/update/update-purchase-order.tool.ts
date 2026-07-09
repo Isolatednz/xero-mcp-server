@@ -12,17 +12,18 @@ const trackingSchema = z.object({
 });
 
 const lineItemSchema = z.object({
-  lineItemID: z.string().describe("The ID of an existing line item to update in place. \
-    Can be obtained from the list-purchase-orders or get-purchase-order tools. \
-    When provided, only the fields included in this call are changed on that line item - \
-    any fields left out (for example unitAmount) are preserved as-is, not cleared. \
-    Omit this field entirely when adding a brand new line item, and in that case provide \
-    description, quantity, unitAmount, accountCode, and taxType.").optional(),
-  description: z.string().describe("The description of the line item").optional(),
-  quantity: z.number().describe("The quantity of the line item").optional(),
-  unitAmount: z.number().describe("The price per unit of the line item").optional(),
-  accountCode: z.string().describe("The account code of the line item - can be obtained from the list-accounts tool").optional(),
-  taxType: z.string().describe("The tax type of the line item - can be obtained from the list-tax-rates tool").optional(),
+  lineItemID: z.string().describe("The ID of an existing line item, if updating one in place \
+    rather than adding a new line. Can be obtained from the list-purchase-orders or \
+    get-purchase-order tools. Unlike invoices, Xero's Purchase Orders API does NOT preserve \
+    omitted fields when a lineItemID is supplied - every field below (description, quantity, \
+    unitAmount, accountCode, taxType) must still be provided in full on every line, even when \
+    only one value (e.g. quantity) is actually changing. Fetch the existing line item first \
+    with get-purchase-order if you need its current values to resupply them.").optional(),
+  description: z.string().describe("The description of the line item"),
+  quantity: z.number().describe("The quantity of the line item"),
+  unitAmount: z.number().describe("The price per unit of the line item"),
+  accountCode: z.string().describe("The account code of the line item - can be obtained from the list-accounts tool"),
+  taxType: z.string().describe("The tax type of the line item - can be obtained from the list-tax-rates tool"),
   itemCode: z.string().describe("The item code of the line item - can be obtained from the list-items tool.").optional(),
   tracking: z.array(trackingSchema).describe("Up to 2 tracking categories and options can be added to the line item. \
     Can be obtained from the list-tracking-categories tool. \
@@ -32,11 +33,15 @@ const lineItemSchema = z.object({
 const UpdatePurchaseOrderTool = CreateXeroTool(
   "update-purchase-order",
   "Update a purchase order in Xero. Only works while the purchase order is still a draft.\
-  All line items must be provided. Any line items not provided will be removed, including existing line items.\
-  Do not modify line items that have not been specified by the user.\
-  To change only specific fields on an existing line item (for example just the quantity), \
-  include that line item's lineItemID (from list-purchase-orders or get-purchase-order) along \
-  with only the field(s) you want to change - omitted fields are preserved, not cleared.\
+  All line items must be provided in full on every call. Any line items not provided will be \
+  removed, including existing line items. Do not modify line items that have not been \
+  specified by the user.\
+  Unlike update-invoice, this does NOT support partial per-field updates: even when you include \
+  an existing line item's lineItemID to update it in place, Xero still requires description, \
+  quantity, unitAmount, accountCode, and taxType to all be supplied - omitted fields are not \
+  preserved and the call will fail with a validation error. If you only want to change one \
+  field (e.g. quantity), first call get-purchase-order to read the line item's current values, \
+  then resupply all of them here with just that one field changed.\
   This tool can also be used to move the purchase order forward, for example setting status \
   to SUBMITTED or AUTHORISED once it's ready.\
   When a purchase order is updated, a deep link to it in Xero is returned. \

@@ -5,16 +5,18 @@ import { PurchaseOrder, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 
 interface PurchaseOrderLineItem {
-  // Include an existing line's lineItemID to update it in place: Xero will
-  // only change the fields supplied below and leave any omitted fields
-  // untouched, rather than clearing them (same behaviour as update-invoice,
-  // see gh-158). Omit lineItemID entirely to add a brand new line item.
+  // Optionally target an existing line by ID rather than adding a new one.
+  // IMPORTANT: unlike update-invoice (gh-158), Xero's Purchase Orders API
+  // does NOT preserve omitted fields when lineItemID is supplied - every
+  // field below is still mandatory on every line, every call, confirmed via
+  // a live 400 ValidationException ("The UnitAmount field is mandatory")
+  // when only lineItemID + quantity were sent.
   lineItemID?: string;
-  description?: string;
-  quantity?: number;
-  unitAmount?: number;
-  accountCode?: string;
-  taxType?: string;
+  description: string;
+  quantity: number;
+  unitAmount: number;
+  accountCode: string;
+  taxType: string;
   itemCode?: string;
   tracking?: LineItemTracking[];
 }
