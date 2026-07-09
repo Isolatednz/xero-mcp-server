@@ -8,6 +8,7 @@ export const formatLineItem = (lineItem: LineItem): string => {
       ? lineItem.tracking.map((t) => `${t.name}: ${t.option}`).join(", ")
       : "None";
   return [
+    `Line Item ID: ${lineItem.lineItemID}`,
     `Item ID: ${lineItem.item}`,
     `Item Code: ${lineItem.itemCode}`,
     `Description: ${lineItem.description}`,

@@ -5,11 +5,17 @@ import { Invoice, LineItemTracking } from "xero-node";
 import { getClientHeaders } from "../helpers/get-client-headers.js";
 
 interface InvoiceLineItem {
-  description: string;
-  quantity: number;
-  unitAmount: number;
-  accountCode: string;
-  taxType: string;
+  // Include an existing line's lineItemID to update it in place: Xero will only
+  // change the fields supplied below and leave any omitted fields (e.g. unitAmount)
+  // untouched, rather than clearing them (gh-158). Omit lineItemID entirely to add
+  // a brand new line item, in which case description/quantity/unitAmount/accountCode/
+  // taxType should all be supplied.
+  lineItemID?: string;
+  description?: string;
+  quantity?: number;
+  unitAmount?: number;
+  accountCode?: string;
+  taxType?: string;
   itemCode?: string;
   tracking?: LineItemTracking[];
 }

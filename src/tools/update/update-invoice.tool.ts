@@ -12,11 +12,17 @@ const trackingSchema = z.object({
 });
 
 const lineItemSchema = z.object({
-  description: z.string().describe("The description of the line item"),
-  quantity: z.number().describe("The quantity of the line item"),
-  unitAmount: z.number().describe("The price per unit of the line item"),
-  accountCode: z.string().describe("The account code of the line item - can be obtained from the list-accounts tool"),
-  taxType: z.string().describe("The tax type of the line item - can be obtained from the list-tax-rates tool"),
+  lineItemID: z.string().describe("The ID of an existing line item to update in place. \
+    Can be obtained from the list-invoices tool (shown as 'Line Item ID' when line items are returned). \
+    When provided, only the fields included in this call are changed on that line item - \
+    any fields left out (for example unitAmount) are preserved as-is, not cleared. \
+    Omit this field entirely when adding a brand new line item, and in that case provide \
+    description, quantity, unitAmount, accountCode, and taxType.").optional(),
+  description: z.string().describe("The description of the line item").optional(),
+  quantity: z.number().describe("The quantity of the line item").optional(),
+  unitAmount: z.number().describe("The price per unit of the line item").optional(),
+  accountCode: z.string().describe("The account code of the line item - can be obtained from the list-accounts tool").optional(),
+  taxType: z.string().describe("The tax type of the line item - can be obtained from the list-tax-rates tool").optional(),
   itemCode: z.string().describe("The item code of the line item - can be obtained from the list-items tool \
     If the item was not populated in the original invoice, \
     add without an item code unless the user has told you to add an item code.").optional(),
@@ -30,6 +36,11 @@ const UpdateInvoiceTool = CreateXeroTool(
   "Update an invoice in Xero. Only works on draft invoices.\
   All line items must be provided. Any line items not provided will be removed. Including existing line items.\
   Do not modify line items that have not been specified by the user.\
+  To change only specific fields on an existing line item (for example just the quantity, \
+  leaving a manually-entered 4dp unit price untouched), include that line item's lineItemID \
+  (from list-invoices) along with only the field(s) you want to change - omitted fields are \
+  preserved, not cleared. Line items without a lineItemID are treated as new additions and \
+  should have all their fields supplied.\
  When an invoice is updated, a deep link to the invoice in Xero is returned. \
  This deep link can be used to view the contact in Xero directly. \
  This link should be displayed to the user.",
@@ -56,11 +67,12 @@ const UpdateInvoiceTool = CreateXeroTool(
     }: {
       invoiceId: string;
       lineItems?: Array<{
-        description: string;
-        quantity: number;
-        unitAmount: number;
-        accountCode: string;
-        taxType: string;
+        lineItemID?: string;
+        description?: string;
+        quantity?: number;
+        unitAmount?: number;
+        accountCode?: string;
+        taxType?: string;
       }>;
       reference?: string;
       dueDate?: string;
