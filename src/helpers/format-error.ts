@@ -48,6 +48,22 @@ function formatHttpStatus(status: number): string {
  * reach the response.
  */
 export function formatError(error: unknown): string {
+  // Some xero-node SDK calls (notably the binary-upload attachment endpoints,
+  // e.g. createInvoiceAttachmentByFileName) reject with
+  // JSON.stringify(ApiError.generateError()) - a plain string - rather than
+  // an Error/AxiosError/object. isXeroSdkError() below requires an object, so
+  // without this unwrap step those errors fell straight through to the fully
+  // generic message, hiding the real Xero API response. Parse it and re-run
+  // through the same (already secret-safe) checks below.
+  if (typeof error === "string") {
+    try {
+      return formatError(JSON.parse(error));
+    } catch {
+      // Not JSON - treat as an unrecognised error shape, same as before.
+      return "An unexpected error occurred while communicating with Xero.";
+    }
+  }
+
   if (error instanceof AxiosError) {
     const status = error.response?.status;
     const detail = error.response?.data?.Detail;
