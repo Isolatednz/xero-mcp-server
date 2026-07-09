@@ -118,6 +118,78 @@ describe("formatError", () => {
       const sdkError = { response: { statusCode: 502 } };
       expect(formatError(sdkError)).toBe("502 HTTP error");
     });
+
+    it("extracts the real ValidationException shape (Elements[].ValidationErrors[].Message)", () => {
+      // This is what Xero actually sends back for a 400 on create/update
+      // calls - see developer.xero.com/documentation/api/accounting/responsecodes
+      const sdkError = JSON.stringify({
+        response: {
+          statusCode: 400,
+          body: {
+            ErrorNumber: 10,
+            Type: "ValidationException",
+            Message: "A validation exception occurred",
+            Elements: [
+              {
+                PurchaseOrderID: "836c984f-bd6c-4946-b634-01cfa901efb1",
+                HasErrors: true,
+                ValidationErrors: [
+                  { Message: "One or more line items must be specified" },
+                ],
+              },
+            ],
+          },
+          request: { headers: { authorization: "Bearer eyJPOLEAK" } },
+        },
+      });
+
+      const result = formatError(sdkError);
+
+      expect(result).toBe(
+        "400 ValidationException: One or more line items must be specified",
+      );
+      expect(result).not.toContain("Bearer");
+    });
+
+    it("joins multiple validation error messages", () => {
+      const sdkError = {
+        response: {
+          statusCode: 400,
+          body: {
+            Type: "ValidationException",
+            Elements: [
+              {
+                ValidationErrors: [
+                  { Message: "Field A is invalid" },
+                  { Message: "Field B is required" },
+                ],
+              },
+            ],
+          },
+        },
+      };
+
+      expect(formatError(sdkError)).toBe(
+        "400 ValidationException: Field A is invalid; Field B is required",
+      );
+    });
+
+    it("falls back to the top-level Message when there are no per-element ValidationErrors", () => {
+      const sdkError = {
+        response: {
+          statusCode: 400,
+          body: {
+            Type: "ValidationException",
+            Message: "A validation exception occurred",
+            Elements: [{ HasErrors: true }],
+          },
+        },
+      };
+
+      expect(formatError(sdkError)).toBe(
+        "400 ValidationException: A validation exception occurred",
+      );
+    });
   });
 
   describe("plain Error", () => {

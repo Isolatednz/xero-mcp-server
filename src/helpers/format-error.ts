@@ -6,14 +6,30 @@ interface XeroSdkProblem {
   status?: number;
 }
 
+interface XeroValidationError {
+  Message?: string;
+}
+
+interface XeroValidationElement {
+  ValidationErrors?: XeroValidationError[];
+}
+
+interface XeroErrorBody {
+  httpStatusCode?: string;
+  problem?: XeroSdkProblem;
+  Detail?: string;
+  Message?: string;
+  Type?: string;
+  // Real shape of a Xero Accounting API validation failure, e.g.:
+  // { "Type": "ValidationException", "Message": "A validation exception
+  //   occurred", "Elements": [{ "ValidationErrors": [{ "Message": "..." }] }] }
+  Elements?: XeroValidationElement[];
+}
+
 interface XeroSdkError {
   response: {
     statusCode: number;
-    body?: {
-      httpStatusCode?: string;
-      problem?: XeroSdkProblem;
-      Detail?: string;
-    };
+    body?: XeroErrorBody;
   };
 }
 
@@ -40,6 +56,39 @@ function formatHttpStatus(status: number): string {
 }
 
 /**
+ * Pulls a human-readable title/detail out of a Xero Accounting API error
+ * body. Handles three shapes we've actually seen in the wild:
+ *  - the OpenAPI "problem" shape (title/detail/status)
+ *  - the plain Detail/httpStatusCode shape
+ *  - the real ValidationException shape: Elements[].ValidationErrors[].Message,
+ *    with a top-level Type/Message as fallback (this is what most 400s from
+ *    create/update calls actually look like)
+ */
+function extractXeroErrorDetail(
+  body: XeroErrorBody | undefined,
+): { title: string; detail: string | undefined } {
+  const problem = body?.problem;
+
+  const validationMessages = body?.Elements
+    ?.flatMap((element) => element.ValidationErrors ?? [])
+    .map((validationError) => validationError.Message)
+    .filter((message): message is string => Boolean(message));
+
+  const title =
+    problem?.title ?? body?.httpStatusCode ?? body?.Type ?? "HTTP error";
+
+  const detail =
+    problem?.detail ??
+    body?.Detail ??
+    (validationMessages && validationMessages.length > 0
+      ? validationMessages.join("; ")
+      : undefined) ??
+    body?.Message;
+
+  return { title, detail };
+}
+
+/**
  * Format error messages for return to the LLM.
  *
  * Never stringify unknown error objects — the xero-node SDK rejects with a
@@ -48,13 +97,14 @@ function formatHttpStatus(status: number): string {
  * reach the response.
  */
 export function formatError(error: unknown): string {
-  // Some xero-node SDK calls (notably the binary-upload attachment endpoints,
-  // e.g. createInvoiceAttachmentByFileName) reject with
-  // JSON.stringify(ApiError.generateError()) - a plain string - rather than
-  // an Error/AxiosError/object. isXeroSdkError() below requires an object, so
-  // without this unwrap step those errors fell straight through to the fully
-  // generic message, hiding the real Xero API response. Parse it and re-run
-  // through the same (already secret-safe) checks below.
+  // Every xero-node SDK call rejects with
+  // JSON.stringify(new ApiError(axiosError).generateError()) - a plain
+  // string - rather than an Error/AxiosError/object, whenever the request
+  // fails. isXeroSdkError() below requires an object, so without this
+  // unwrap step those errors fell straight through to the fully generic
+  // message below, hiding the real Xero API response for every tool in
+  // this connector, not just one endpoint. Parse it and re-run through the
+  // same (already secret-safe) checks below.
   if (typeof error === "string") {
     try {
       return formatError(JSON.parse(error));
@@ -66,12 +116,13 @@ export function formatError(error: unknown): string {
 
   if (error instanceof AxiosError) {
     const status = error.response?.status;
-    const detail = error.response?.data?.Detail;
 
     if (status !== undefined) {
       const mapped = formatHttpStatus(status);
       if (mapped) return mapped;
     }
+
+    const { detail } = extractXeroErrorDetail(error.response?.data);
     return detail || "An error occurred while communicating with Xero.";
   }
 
@@ -80,10 +131,7 @@ export function formatError(error: unknown): string {
     const mapped = formatHttpStatus(status);
     if (mapped) return mapped;
 
-    const body = error.response.body;
-    const problem = body?.problem;
-    const title = problem?.title ?? body?.httpStatusCode ?? "HTTP error";
-    const detail = problem?.detail ?? body?.Detail;
+    const { title, detail } = extractXeroErrorDetail(error.response.body);
     return detail ? `${status} ${title}: ${detail}` : `${status} ${title}`;
   }
 
