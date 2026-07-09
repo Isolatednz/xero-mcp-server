@@ -143,10 +143,40 @@ describe("formatError", () => {
       expect(result).not.toContain("LEAKY_TOKEN");
     });
 
-    it("handles string errors safely", () => {
+    it("handles non-JSON string errors safely", () => {
       expect(formatError("something blew up")).toBe(
         "An unexpected error occurred while communicating with Xero.",
       );
+    });
+
+    it("unwraps JSON.stringify()'d SDK errors from binary-upload endpoints (e.g. attachments)", () => {
+      // xero-node's createInvoiceAttachmentByFileName rejects with exactly this
+      // shape: JSON.stringify(new ApiError(axiosError).generateError()).
+      const stringifiedSdkError = JSON.stringify({
+        response: {
+          statusCode: 400,
+          body: {
+            httpStatusCode: "BadRequest",
+            problem: {
+              title: "BadRequest",
+              detail: "Invalid file name.",
+              status: 400,
+            },
+          },
+          headers: { "set-cookie": "ak_bmsc=secret" },
+          request: {
+            headers: { authorization: "Bearer eyJATTACHMENTSECRET" },
+          },
+        },
+        body: { httpStatusCode: "BadRequest" },
+      });
+
+      const result = formatError(stringifiedSdkError);
+
+      expect(result).toBe("400 BadRequest: Invalid file name.");
+      expect(result).not.toContain("Bearer");
+      expect(result).not.toContain("eyJATTACHMENTSECRET");
+      expect(result).not.toContain("set-cookie");
     });
 
     it("handles null safely", () => {
